@@ -5,7 +5,7 @@ from celery import signals
 from kombu.serialization import loads
 from redis import Redis
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __author__ = "Michael R. van Rooijen"
 __contact__ = "support@autoscale.app"
 __homepage__ = "https://autoscale.app"
