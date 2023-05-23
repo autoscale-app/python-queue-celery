@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "autoscale-queue-celery"
-version = "0.1.1"
+version = "0.2.0"
 description = "Produces Celery queue metrics for the Autoscale.app Agent"
 authors = ["Michael R. van Rooijen <support@autoscale.app>"]
 license = "MIT"
