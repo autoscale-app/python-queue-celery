@@ -6,7 +6,7 @@ from celery import Celery
 from freezegun import freeze_time
 from redis import ConnectionError, Redis
 
-from autoscale_queue_celery import latency
+from autoscale_queue_celery import job_queue_time
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/2")
 
@@ -28,78 +28,78 @@ def clean_redis(redis_connection):
     redis_connection.flushdb()
 
 
-def test_latency_invalid_redis_connection():
+def test_job_queue_time_invalid_redis_connection():
     with pytest.raises(ConnectionError):
-        latency(["celery"], "redis://invalid-host:6379/0")
+        job_queue_time(["celery"], "redis://invalid-host:6379/0")
 
 
-def test_latency_no_queues(redis_connection, clean_redis):
+def test_job_queue_time_no_queues(redis_connection, clean_redis):
     with pytest.raises(ValueError, match="At least one queue must be provided"):
-        latency([], REDIS_URL)
+        job_queue_time([], REDIS_URL)
 
 
-def test_latency_no_tasks(redis_connection, clean_redis):
-    assert latency(["celery"], REDIS_URL) == 0
+def test_job_queue_time_no_tasks(redis_connection, clean_redis):
+    assert job_queue_time(["celery"], REDIS_URL) == 0
 
 
 @freeze_time("2000-01-01")
-def test_latency_one_task(redis_connection, clean_redis):
+def test_job_queue_time_one_task(redis_connection, clean_redis):
     with freeze_time(datetime.now(timezone.utc) - timedelta(seconds=5)):
         add.delay(1, 2)
 
-    assert latency(["celery"], REDIS_URL) == 5.0
+    assert job_queue_time(["celery"], REDIS_URL) == 5.0
 
 
 @freeze_time("2000-01-01")
-def test_latency_multiple_tasks(redis_connection, clean_redis):
+def test_job_queue_time_multiple_tasks(redis_connection, clean_redis):
     with freeze_time(datetime.now(timezone.utc) - timedelta(seconds=10)):
         add.apply_async(args=[1, 2])
 
     with freeze_time(datetime.now(timezone.utc) - timedelta(seconds=5)):
         add.apply_async(args=[3, 4])
 
-    assert latency(["celery"], REDIS_URL) == 10
+    assert job_queue_time(["celery"], REDIS_URL) == 10
 
 
 @freeze_time("2000-01-01")
-def test_latency_custom_queues(redis_connection, clean_redis):
+def test_job_queue_time_custom_queues(redis_connection, clean_redis):
     with freeze_time(datetime.now(timezone.utc) - timedelta(seconds=5)):
         add.apply_async(args=[1, 2])
 
     with freeze_time(datetime.now(timezone.utc) - timedelta(seconds=10)):
         add.apply_async(args=[3, 4], queue="celery_2")
 
-    assert latency(["celery", "celery_2"], REDIS_URL) == 10
+    assert job_queue_time(["celery", "celery_2"], REDIS_URL) == 10
 
 
 @freeze_time("2000-01-01")
-def test_latency_eta(redis_connection, clean_redis):
+def test_job_queue_time_eta(redis_connection, clean_redis):
     eta = datetime.now(timezone.utc) + timedelta(seconds=5)
     add.apply_async(args=[1, 2], eta=eta)
-    assert latency(["celery"], REDIS_URL) == 0
+    assert job_queue_time(["celery"], REDIS_URL) == 0
 
 
 @freeze_time("2000-01-01")
-def test_latency_eta_passed(redis_connection, clean_redis):
+def test_job_queue_time_eta_passed(redis_connection, clean_redis):
     eta = datetime.now(timezone.utc) - timedelta(seconds=5)
     add.apply_async(args=[1, 2], eta=eta)
-    assert latency(["celery"], REDIS_URL) == 5
+    assert job_queue_time(["celery"], REDIS_URL) == 5
 
 
 @freeze_time("2000-01-01")
-def test_latency_countdown(redis_connection, clean_redis):
+def test_job_queue_time_countdown(redis_connection, clean_redis):
     add.apply_async(args=[1, 2], countdown=5)
-    assert latency(["celery"], REDIS_URL) == 0
+    assert job_queue_time(["celery"], REDIS_URL) == 0
 
 
 @freeze_time("2000-01-01")
-def test_latency_countdown_passed(redis_connection, clean_redis):
+def test_job_queue_time_countdown_passed(redis_connection, clean_redis):
     add.apply_async(args=[1, 2], countdown=-5)
-    assert latency(["celery"], REDIS_URL) == 5
+    assert job_queue_time(["celery"], REDIS_URL) == 5
 
 
 @freeze_time("2000-01-01")
-def test_latency_expiration(redis_connection, clean_redis):
+def test_job_queue_time_expiration(redis_connection, clean_redis):
     with freeze_time(datetime.now(timezone.utc) - timedelta(seconds=60)):
         expired = datetime.now(timezone.utc) + timedelta(seconds=30)
         add.apply_async(args=[1, 2], expires=expired)
@@ -107,27 +107,29 @@ def test_latency_expiration(redis_connection, clean_redis):
     with freeze_time(datetime.now(timezone.utc) - timedelta(seconds=30)):
         add.apply_async(args=[3, 4])
 
-    assert latency(["celery"], REDIS_URL) == 0
+    assert job_queue_time(["celery"], REDIS_URL) == 0
 
 
-def test_latency_redis_url_from_env_var(monkeypatch, redis_connection, clean_redis):
+def test_job_queue_time_redis_url_from_env_var(
+    monkeypatch, redis_connection, clean_redis
+):
     monkeypatch.setenv("REDIS_URL", REDIS_URL)
-    assert latency(["celery"]) == 0
+    assert job_queue_time(["celery"]) == 0
 
 
-def test_latency_no_redis_url(monkeypatch, redis_connection, clean_redis):
+def test_job_queue_time_no_redis_url(monkeypatch, redis_connection, clean_redis):
     monkeypatch.delenv("REDIS_URL", raising=False)
     with pytest.raises(
         ValueError,
         match="redis_url not provided and REDIS_URL environment variable is not set",
     ):
-        latency(["celery"], None)
+        job_queue_time(["celery"], None)
 
 
-def test_latency_empty_redis_url(monkeypatch, redis_connection, clean_redis):
+def test_job_queue_time_empty_redis_url(monkeypatch, redis_connection, clean_redis):
     monkeypatch.setenv("REDIS_URL", "")
     with pytest.raises(
         ValueError,
         match="redis_url not provided and REDIS_URL environment variable is not set",
     ):
-        latency(["celery"], None)
+        job_queue_time(["celery"], None)
